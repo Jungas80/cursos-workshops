@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS CloudFormation Template to create a custom VPC
+
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: '10.0.0.0/16'
+    Description: Enter the CIDR block for the VPC. Default is 10.0.0.0/16
+  
+  VpcName:
+    Type: String
+    Default: MyVPC
+    Description: Enter the name of the VPC. Default is MyVPC
+
+  IPv6Support:
+    Type: String
+    Default: 'false'
+    Description: Enter true to enable IPv6 support. Default is false
+
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref VpcName
+  
+  VPCIpv6CidrBlock:
+    Type: 'AWS::EC2::VPCCidrBlock'
+    Condition: IPv6Condition
+    Properties:
+      VpcId: !Ref VPC
+      AmazonProvidedIpv6CidrBlock: true
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ !Ref VpcName, '-IGW' ] ]
+
+  AttachGateway:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+
+Conditions:
+  IPv6Condition: !Equals [ !Ref IPv6Support, 'true' ]
+
+
