@@ -1,0 +1,235 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "Cloudformation template with 2 instances. One in public subnet and one in private subnet. The public instance is accessible via ssh from the internet. The private instance is accessible via ssh from the public instance. The private instance does not have internet access.",
+
+
+  "Mappings" : {	
+
+    "SubnetConfig" : {
+      "VPC"     : { "CIDR" : "10.0.0.0/16" },
+      "Subnet1"  : { "CIDR" : "10.0.0.0/24" },
+      "Subnet2"  : { "CIDR" : "10.0.1.0/24" }
+    }
+  },
+
+  "Resources" : {
+
+    "VPC" : {
+      "Type" : "AWS::EC2::VPC",
+      "Properties" : {
+        "EnableDnsSupport" : "true",
+        "EnableDnsHostnames" : "true",
+        "CidrBlock" : { "Fn::FindInMap" : [ "SubnetConfig", "VPC", "CIDR" ]},
+        "Tags" : [
+         { "Key" : "Name", "Value" : "Workshop" }
+        ]
+      }
+    },
+
+    "Subnet1" : {
+      "Type" : "AWS::EC2::Subnet",
+      "Properties" : {
+        "VpcId" : { "Ref" : "VPC" },
+        "MapPublicIpOnLaunch": "true",
+        "AvailabilityZone": { "Fn::Select": [ "0", { "Fn::GetAZs": "" } ] },
+        "CidrBlock" : { "Fn::FindInMap" : [ "SubnetConfig", "Subnet1", "CIDR" ]},
+        "Tags" : [
+          { "Key" : "Application", "Value" : { "Ref" : "AWS::StackName" } },
+          { "Key" : "Network", "Value" : "Subnet1" },
+          { "Key" : "Network", "Value" : "Public Subnet" }
+        ]
+      }
+    },
+    
+    "Subnet2" : {
+      "Type" : "AWS::EC2::Subnet",
+      "Properties" : {
+        "VpcId" : { "Ref" : "VPC" },
+        "MapPublicIpOnLaunch": "true",
+        "AvailabilityZone": { "Fn::Select": [ "1", { "Fn::GetAZs": "" } ] },
+        "CidrBlock" : { "Fn::FindInMap" : [ "SubnetConfig", "Subnet2", "CIDR" ]},
+        "Tags" : [
+          { "Key" : "Application", "Value" : { "Ref" : "AWS::StackName" } },
+          { "Key" : "Network", "Value" : "Subnet2" },
+          { "Key" : "Network", "Value" : "Private Subnet" }
+        ]
+      }
+    },
+
+    "InternetGateway" : {
+      "Type" : "AWS::EC2::InternetGateway",
+      "Properties" : {
+        "Tags" : [
+          { "Key" : "Application", "Value" : { "Ref" : "AWS::StackName" } },
+          { "Key" : "Network", "Value" : "Public" }
+        ]
+      }
+    },
+
+    "GatewayToInternet" : {
+     "Type" : "AWS::EC2::VPCGatewayAttachment",
+     "Properties" : {
+       "VpcId" : { "Ref" : "VPC" },
+       "InternetGatewayId" : { "Ref" : "InternetGateway" }
+     }
+    },
+
+     "PublicRouteTable" : {
+      "Type" : "AWS::EC2::RouteTable",
+      "Properties" : {
+        "VpcId" : { "Ref" : "VPC" },
+        "Tags" : [
+          { "Key" : "Application", "Value" : { "Ref" : "AWS::StackName" } },
+          { "Key" : "Network", "Value" : "Public" }
+        ]
+      }
+    },
+
+    "PublicRoute" : {
+      "Type" : "AWS::EC2::Route",
+      "DependsOn" : "GatewayToInternet",
+      "Properties" : {
+        "RouteTableId" : { "Ref" : "PublicRouteTable" },
+        "DestinationCidrBlock" : "0.0.0.0/0",
+        "GatewayId" : { "Ref" : "InternetGateway" }
+      }
+    },
+
+    "PublicSubnetRouteTableAssociation1" : {
+      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties" : {
+        "SubnetId" : { "Ref" : "Subnet1" },
+        "RouteTableId" : { "Ref" : "PublicRouteTable" }
+      }
+    },
+
+    "EC2SecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Enable SSH access to the EC2 host",
+        "VpcId" : { "Ref" : "VPC" },
+        "SecurityGroupIngress" : [
+         { "IpProtocol" : "tcp", "FromPort" : "22",  "ToPort" : "22",  "CidrIp" : "0.0.0.0/0" }
+       ]
+      }
+    },
+
+    "PublicInstance" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "InstanceType" : "t3.micro",         
+        "ImageId" : "ami-0715c1897453cabd1",
+        "IamInstanceProfile": { "Ref": "RootInstanceProfile" },
+        "UserData":      { "Fn::Base64": { "Fn::Join": ["", [
+          "#!/bin/bash\n",
+            "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config\n",
+            "systemctl restart sshd\n",
+            "echo -e \"qwe123cxz\\nqwe123cxz\" | passwd ec2-user\n"
+        ]]}},
+        "NetworkInterfaces" : [{
+          "GroupSet"                 : [{ "Ref" : "EC2SecurityGroup" }],
+          "AssociatePublicIpAddress": "true",
+          "DeviceIndex"              : "0",
+          "DeleteOnTermination"      : "true",
+          "SubnetId"                 : { "Ref" : "Subnet1" }
+        }]
+      }
+    },
+
+    "PrivateInstance" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "InstanceType" : "t3.micro",         
+        "ImageId" : "ami-0715c1897453cabd1",
+        "IamInstanceProfile": { "Ref": "RootInstanceProfile" },
+        "UserData":      { "Fn::Base64": { "Fn::Join": ["", [
+          "#!/bin/bash\n",
+            "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config\n",
+            "systemctl restart sshd\n",
+            "echo -e \"qwe123cxz\\nqwe123cxz\" | passwd ec2-user\n"
+        ]]}},
+        "NetworkInterfaces" : [{
+          "GroupSet"                 : [{ "Ref" : "EC2SecurityGroup" }],
+          "AssociatePublicIpAddress": "false",
+          "DeviceIndex"              : "0",
+          "DeleteOnTermination"      : "true",
+          "SubnetId"                 : { "Ref" : "Subnet2" }
+        }]
+      }
+    },
+
+    "RootInstanceProfile": {
+         "Type": "AWS::IAM::InstanceProfile",
+         "Properties": {
+            "Path": "/",
+            "Roles": [ {
+               "Ref": "EC2Role"
+            } ]
+         }
+      },
+    "EC2Role": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+          "AssumeRolePolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                  {
+                      "Effect": "Allow",
+                      "Principal": {
+                          "Service": ["ec2.amazonaws.com"]
+                      },
+                      "Action": ["sts:AssumeRole"]
+                  }
+              ]
+          },
+          "Path": "/",
+          "Policies": [{
+            "PolicyName": "root",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "s3:*"
+
+                ],
+                "Resource": [
+                  "arn:aws:s3:::*"
+                ]
+              }
+            ]
+            }
+          }]
+      }
+    },
+
+    "S3EndpointLab" : {
+      "Type" : "AWS::S3::Bucket",
+      "Properties" : {
+      }
+    }
+
+  },
+    "Outputs":{
+      "pubIpAddress1":{
+        "Description":"Public IP of Public Instance",
+        "Value":{
+          "Fn::GetAtt":["PublicInstance","PublicIp"]
+        }
+      },
+      "privIpAddress1":{
+        "Description":"Private IP of Public Instance",
+        "Value":{
+          "Fn::GetAtt":["PublicInstance","PrivateIp"]
+        }
+      },
+      "privIpAddress2":{
+        "Description":"Private IP of Private Instance",
+        "Value":{
+          "Fn::GetAtt":["PrivateInstance","PrivateIp"]
+        }
+      }
+    }
+  }
