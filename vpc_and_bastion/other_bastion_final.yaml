@@ -1,7 +1,7 @@
 {
   "AWSTemplateFormatVersion" : "2010-09-09",
 
-  "Description" : "Cloudformation template with 1 instance that adds an arecord to linuxacademylabs.com",
+  "Description" : "Cloudformation template with 2 instances. One in public subnet and one in private subnet. The public instance is accessible via ssh from the internet. The private instance is accessible via ssh from the public instance. The private instance does not have internet access.",
 
 
   "Mappings" : {	
