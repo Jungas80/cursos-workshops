@@ -24,4 +24,4 @@ jobs:
       BRANCH : ${{ inputs.branch }}
       USER_id : ${{ inputs.user_id }}
     secrets:
-      AC_GITHUB_TOKEN: ${{secrets.YOUR_SECRET_NAME}}
+      AC_GITHUB_TOKEN: ${{secrets.AC_SECRET_DEMO}}
