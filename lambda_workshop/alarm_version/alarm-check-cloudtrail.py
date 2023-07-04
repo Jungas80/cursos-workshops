@@ -1,11 +1,15 @@
 import boto3
 import json
 from datetime import datetime, timezone, timedelta
+from collections import defaultdict
 
 cloudtrail_client = boto3.client('cloudtrail')
 
-def lambda_handler(event, context):
-    
+def lambda_handler(event, context):  # This is the handler function
+    # Initialize a dictionary to store the logs
+    logs = defaultdict(lambda: defaultdict(list))
+
+    # Process up to 10 messages received from the SQS queue
     for record in event['Records']:
         message_body = json.loads(record['body'])  # Parse the JSON string to a list
         print(f"Message Body: {message_body}")
@@ -21,7 +25,7 @@ def lambda_handler(event, context):
                 LookupAttributes=[
                     {
                         'AttributeKey': 'ResourceName',
-                        'AttributeValue': function_name 
+                        'AttributeValue': function_name  # Use the individual function name here
                     },
                 ],
                 StartTime=start_time,
@@ -45,9 +49,18 @@ def lambda_handler(event, context):
                         if user_name is None:
                             user_name = 'Unknown'
 
-                        print(f"Function Name: {function_name}")
-                        print(f"Modified By: {user_name}")
-                        print("--------------------------")
+                        # Add the log to the dictionary
+                        logs[function_name][user_name].append(event['EventTime'])
+
+    # Print the logs
+    for function_name, users in logs.items():
+        print(f"Function Name: {function_name}")
+        for user_name, times in users.items():
+            print(f"Modified By: {user_name}")
+            for time in times:
+                print(f"Time: {time}")
+            print(f"Total Modifications: {len(times)}")
+        print("--------------------------")
 
     return {
         'statusCode': 200,
