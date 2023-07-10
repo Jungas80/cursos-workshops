@@ -3,7 +3,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 dynamodb = boto3.resource('dynamodb')
-table = dynamodb.Table('alarm-version-output')  # Replace with your table name
+table = dynamodb.Table('alarm-version-output')  # Replace with your table name 
 
 def lambda_handler(event, context):
     for record in event['Records']:

@@ -1,6 +1,6 @@
 ## This lambda function checks CloudTrail logs for specific events and sends a message to an SQS queue ##
 # if the event is not present in the CloudTrail logs for the last 24 hours #
-## Created by Juan Hegert - DevOps Engineer ##
+## Created by Juan Hegert - DevOps Engineer ## 
 
 import os
 import boto3
