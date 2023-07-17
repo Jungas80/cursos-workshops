@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Infrastructure setup in each sub-account
+Resources:
+
+  EventBus:
+    Type: 'AWS::Events::EventBus'
+    Properties:
+      Name: ClientEventBus
+
+  EventRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      EventBusName: !Ref EventBus
+      EventPattern:
+        source: 
+          - 'aws.lambda'
+        'detail-type':
+          - 'AWS API Call via CloudTrail'
+        detail:
+          eventSource: 
+            - 'lambda.amazonaws.com'
+          eventName: 
+            - 
+              prefix: 'UpdateFunction'
+          eventType:
+            - 'AwsApiCall'
+      State: ENABLED
+      Targets:
+        - Arn: arn:aws:events:us-east-1:<CENTRALID>:event-bus/CentralEventBus
+          RoleArn: !GetAtt EventBridgeRole.Arn
+          Id: EventTarget
+
+
+  EventBridgeRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: eventBridgePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: arn:aws:events:us-east-1:<CENTRALID>:event-bus/CentralEventBus

@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Infrastructure setup in Account A
+Resources:
+
+  EventBus:
+    Type: 'AWS::Events::EventBus'
+    Properties:
+      Name: CentralEventBus
+
+  SnsTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      DisplayName: CentralEventNotifications
+      TopicName: central-event-notifications
+
+  LambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code: 
+        ZipFile: |
+          import json
+          import urllib3
+
+          def lambda_handler(event, context):
+              url = ""
+
+              msg = {  
+                "channel": "test-slack-notifications",
+                "text": json.dumps(event),
+              }
+
+              http = urllib3.PoolManager() 
+              encoded_msg = json.dumps(msg).encode('utf-8')
+              resp = http.request('POST', url, body=encoded_msg)
+              print({
+                "message": event,
+                "status_code": resp.status,
+                "response": resp.data
+              })
+
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.8
+      Timeout: 30
+
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - lambda.amazonaws.com
+            Action: 
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: lambdaExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  SnsSubscription:
+    Type: 'AWS::SNS::Subscription'
+    Properties:
+      Protocol: 'lambda'
+      Endpoint: !GetAtt LambdaFunction.Arn
+      TopicArn: !Ref SnsTopic
+
+  LambdaPermissionForSNS:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !GetAtt LambdaFunction.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref SnsTopic
+
+  CentralEventRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      EventBusName: !Ref EventBus
+      EventPattern:
+        source: 
+          - 'aws.lambda'
+        'detail-type':
+          - 'AWS API Call via CloudTrail'
+        detail:
+          eventSource: 
+            - 'lambda.amazonaws.com'
+          eventName: 
+            - 
+              prefix: 'UpdateFunctionCode'
+          eventType:
+            - 'AwsApiCall'
+      Targets:
+        - Arn: !Ref SnsTopic
+          Id: SnsTarget
+
